@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>智能挽单 Demo</title>
+<meta name="description" content="逐步回放三段购物会话，实时显示犹豫信号、转化概率和顾虑归因，在决策时刻对比一刀切策略和个性化挽留动作。">
+<style>
+:root{
+  --bg:#f7f6f2;--surface:#ffffff;--surface-1:#efede6;--border:rgba(0,0,0,.12);--border-strong:rgba(0,0,0,.24);
+  --text:#1f1e1c;--text-2:#5f5e5a;--text-3:#888780;
+  --accent:#185fa5;--accent-bg:#e6f1fb;--accent-border:#85b7eb;
+  --success:#3b6d11;--success-bg:#eaf3de;--danger:#a32d2d;--danger-bg:#fcebeb;--warning:#854f0b;--warning-bg:#faeeda;
+  --radius:8px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1a1a19;--surface:#242422;--surface-1:#2e2e2b;--border:rgba(255,255,255,.12);--border-strong:rgba(255,255,255,.26);
+  --text:#ecebe6;--text-2:#b4b2a9;--text-3:#888780;
+  --accent:#85b7eb;--accent-bg:#0c447c;--accent-border:#378add;
+  --success:#c0dd97;--success-bg:#27500a;--danger:#f7c1c1;--danger-bg:#791f1f;--warning:#fac775;--warning-bg:#633806;
+}}
+:root[data-theme="dark"]{
+  --bg:#1a1a19;--surface:#242422;--surface-1:#2e2e2b;--border:rgba(255,255,255,.12);--border-strong:rgba(255,255,255,.26);
+  --text:#ecebe6;--text-2:#b4b2a9;--text-3:#888780;
+  --accent:#85b7eb;--accent-bg:#0c447c;--accent-border:#378add;
+  --success:#c0dd97;--success-bg:#27500a;--danger:#f7c1c1;--danger-bg:#791f1f;--warning:#fac775;--warning-bg:#633806;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;line-height:1.6}
+main{max-width:760px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:24px;font-weight:600;margin:0 0 6px}
+.intro{color:var(--text-2);font-size:14px;margin:0 0 20px}
+.intro a{color:var(--accent)}
+button{font:inherit;font-size:13px;color:var(--text);background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);padding:6px 12px;cursor:pointer}
+button:hover{background:var(--surface-1)}button:disabled{opacity:.5;cursor:default}
+.sc.on{border-color:var(--accent-border);color:var(--accent);background:var(--accent-bg)}
+.box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.ev{display:flex;gap:8px;padding:6px 0;border-top:1px solid var(--border);font-size:13px;line-height:1.5}
+.tag{font-size:11px;padding:1px 6px;border-radius:var(--radius);background:var(--surface-1);color:var(--text-2);white-space:nowrap}
+.sig{font-size:12px;color:var(--warning);background:var(--warning-bg);padding:1px 6px;border-radius:var(--radius);display:inline-block;margin-top:3px}
+.bar{height:8px;background:var(--surface-1);border-radius:4px;overflow:hidden}.bar>div{height:100%;background:var(--accent);transition:width .4s}
+.lbl{font-size:12px;color:var(--text-2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.zone{position:relative;height:22px;margin:6px 0 2px;display:flex;border-radius:4px;overflow:visible;font-size:11px}
+.zone>div{text-align:center;line-height:22px}
+footer{margin-top:24px;font-size:12px;color:var(--text-3)}
+</style>
+</head>
+<body>
+<main>
+<h1>智能挽单 Demo</h1>
+<p class="intro">逐步回放一段购物会话：左边是原始行为，右边是实时判断（转化概率决定该不该出手，顾虑强度决定为什么犹豫），到决策时刻对比一刀切规则和我们的动作。完整方案见 <a href="https://github.com/Danmily/plz-buy-it/blob/main/docs/%E6%96%B9%E6%A1%88.md">方案文档</a>。</p>
+
+<div id="tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+<div id="prof" style="background:var(--surface-1);border-radius:var(--radius);padding:10px 12px;font-size:13px;line-height:1.7;margin-bottom:12px"></div>
+<div class="grid">
+  <div class="box"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><span style="font-size:14px;font-weight:600">行为序列</span><span class="lbl" id="stepn"></span></div><div id="evs"></div></div>
+  <div class="box">
+    <div style="font-size:14px;font-weight:600;margin-bottom:8px">实时判断</div>
+    <div class="lbl">转化概率（决定该不该出手）</div>
+    <div class="zone">
+      <div style="width:20%;background:var(--surface-1);color:var(--text-2);border-radius:4px 0 0 4px">弱需求</div>
+      <div style="width:55%;background:var(--accent-bg);color:var(--accent)">犹豫区 · 送 LLM 归因</div>
+      <div style="width:25%;background:var(--surface-1);color:var(--text-2);border-radius:0 4px 4px 0">必买</div>
+      <div id="pm" style="position:absolute;top:-3px;width:3px;height:28px;background:var(--text);transition:left .4s"></div>
+    </div>
+    <div style="font-size:13px;margin-bottom:12px">p = <span id="pv" style="font-weight:600"></span></div>
+    <div class="lbl" style="margin-bottom:6px">顾虑强度（决定为什么犹豫）</div>
+    <div id="cbars"></div>
+  </div>
+</div>
+<div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap">
+  <button id="next">下一步</button><button id="play">播放到决策时刻</button><button id="reset">重置</button>
+</div>
+<div id="dec"></div>
+<footer>页面中的概率、价格、尺码比例等数字均为示意，未接入真实数据。</footer>
+</main>
+<script>
+const CN=['价格','比价','规格适配','品质信任'];
+const S=[
+{name:'用户 A · 降噪耳机',item:'商品：降噪耳机 X，¥399（近 30 天均价 ¥372）',prof:'画像先验：近 30 天领券 6 次、核销 4 次，价格敏感度高；数码类新客',
+ev:[
+['14:02','搜索','搜索「降噪耳机」','',[30,15,5,10],.50],
+['14:03','商详','进入耳机 X 商详，停留 52 秒','',[30,15,5,12],.52],
+['14:04','商详','展开优惠明细，领了 ¥10 店铺券但没用','领券未用 → 价格 +',[48,15,5,12],.48],
+['14:05','商详','加购','',[48,15,5,12],.55],
+['14:06','商详','跳去同类耳机 Y（¥329）商详','看同类低价款 → 比价 +、价格 +',[54,32,5,10],.44],
+['14:09','商详','回到耳机 X，停在价格区','回访同款 → 价格 +',[64,30,5,10],.42],
+['14:10','购物车','进购物车停留 18 秒，没勾选结算','购物车滞留',[66,30,5,10],.38],
+['14:11','离开','退出商城','决策时刻',[66,30,5,10],.38]],
+dec:{go:true,main:'价格',sub:'比价',evi:'#3 领券未用、#5 看低价同类款、#6 回访价格区；画像价格敏感度高',
+one:'购物车退出 → 统一推 ¥10 券',oneNote:'这次方向碰巧一致，但券额和时机都是盲发',
+act:'定向挽留券 + 价格事实，离开后推一次',touch:'离开后 push（1 次）/ 下次打开购物车的降价角标',
+card:{k:'价格',t:'叠加挽留券后 ¥369',s:'低于近 30 天均价 ¥372 · 支持价保 30 天',b:['去结算','看价格走势']},
+why:'真的是价格顾虑，券花得值；文案只放价格事实，不提"看你犹豫很久"'}},
+{name:'用户 B · 跑鞋',item:'商品：跑鞋 Z，¥529',prof:'画像先验：老客；近 90 天退货 2 次，原因都是"尺码不合适"；价格敏感度低',
+ev:[
+['20:15','推荐流','从短视频进入跑鞋 Z 商详','',[10,10,30,25],.50],
+['20:16','商详','选 41 码 → 换 42 → 又换回 41','尺码反复切换 → 规格 +',[8,10,55,20],.48],
+['20:17','商详','打开尺码表，停留 25 秒','看尺码表 → 规格 +',[8,8,66,16],.47],
+['20:18','商详','评价区筛选「尺码」标签','筛尺码评价 → 规格 +',[6,8,74,14],.47],
+['20:19','商详','加购 41 码','',[6,8,74,14],.52],
+['20:20','离开','退出商详','决策时刻',[6,8,74,14],.50]],
+dec:{go:true,main:'规格适配',sub:'品质信任',evi:'#2 尺码反复切换、#3 看尺码表、#4 筛尺码评价；画像显示曾因尺码退货',
+one:'加购后退出 → 统一推 ¥10 券',oneNote:'¥10 解决不了"怕买错码"，券大概率白发',
+act:'不发券，给尺码事实',touch:'购物车商品卡片 / 下次进商详时的尺码区提示',
+card:{k:'规格适配',t:'脚长 25.5cm 的买家 78% 选 41 码',s:'该款偏大半码 · 来自 860 条尺码反馈',b:['打开尺码助手','看同脚长评价']},
+why:'对症下药，零券成本；内容来自其他买家的真实反馈，用户愿意信'}},
+{name:'用户 C · 洗衣液',item:'商品：常买款洗衣液，¥59.9',prof:'画像先验：该品牌复购 5 次，平均间隔 45 天，距上次购买 43 天',
+ev:[
+['09:30','搜索','搜索「品牌名 洗衣液」','',[10,5,0,5],.80],
+['09:30','商详','直接点进常买款，停留 6 秒','直达常买款 → 高意向',[10,5,0,5],.84],
+['09:31','商详','加购','',[10,5,0,5],.88],
+['09:31','结算','进入结算页','',[10,5,0,5],.90],
+['09:31','离开','结算页停留 3 秒后退出','短停留，无犹豫行为；决策时刻',[10,5,0,5],.86]],
+dec:{go:false,main:'无明显顾虑',sub:'',evi:'#1 搜品牌词、#2 直达常买款、#5 退出前没有任何犹豫行为；正处于复购周期',
+one:'结算页退出 → 统一推 ¥10 券',oneNote:'本来就会买，这 ¥10 是纯浪费，还会教会用户"退出就有券"',
+act:'不出手；24 小时内仍未下单，再放一条购物车提醒',touch:'无',
+card:null,why:'"该省的省"：p 落在必买区，不进 LLM，也不发券'}}];
+let si=0,k=0,timer=null;
+const $=id=>document.getElementById(id);
+function tabs(){$('tabs').innerHTML=S.map((s,i)=>`<button class="sc ${i===si?'on':''}" data-i="${i}">${s.name}</button>`).join('');
+document.querySelectorAll('.sc').forEach(b=>b.onclick=()=>{si=+b.dataset.i;k=0;stop();tabs();render()})}
+function render(){const s=S[si],e=s.ev[k];
+$('prof').innerHTML=`${s.item}<br><span style="color:var(--text-2)">${s.prof}</span>`;
+$('stepn').textContent=`第 ${k+1} / ${s.ev.length} 步`;
+$('evs').innerHTML=s.ev.slice(0,k+1).map((v,i)=>`<div class="ev"><span class="lbl" style="min-width:20px">#${i+1}</span><div style="flex:1"><div><span class="tag">${v[1]}</span> <span class="lbl">${v[0]}</span></div><div>${v[2]}</div>${v[3]?`<span class="sig">${v[3]}</span>`:''}</div></div>`).join('');
+$('pv').textContent=e[5].toFixed(2);$('pm').style.left=`calc(${Math.round(e[5]*100)}% - 1px)`;
+$('cbars').innerHTML=CN.map((n,i)=>`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px"><span style="width:60px">${n}</span><div class="bar" style="flex:1"><div style="width:${e[4][i]}%"></div></div><span class="lbl" style="width:24px;text-align:right">${e[4][i]}</span></div>`).join('');
+const last=k===s.ev.length-1;$('next').disabled=last;
+if(!last){$('dec').innerHTML=`<div class="box" style="color:var(--text-2);font-size:13px">会话进行中，还没到决策时刻，先不出手。</div>`;return}
+const d=s.dec,c=d.card;
+$('dec').innerHTML=`<div class="box">
+<div style="font-size:14px;font-weight:600;margin-bottom:8px">决策时刻 · ${d.go?'出手':'不出手'}</div>
+<div style="font-size:13px;line-height:1.7;margin-bottom:12px">主顾虑：<b>${d.main}</b>${d.sub?`　次顾虑：${d.sub}`:''}<br><span class="lbl">证据：${d.evi}</span></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">
+<div style="background:var(--surface-1);border-radius:var(--radius);padding:10px 12px;font-size:13px;line-height:1.6"><div class="lbl">一刀切规则</div><div>${d.one}</div><div style="color:var(--danger);margin-top:4px">${d.oneNote}</div></div>
+<div style="background:var(--success-bg);border-radius:var(--radius);padding:10px 12px;font-size:13px;line-height:1.6;color:var(--success)"><div>我们的动作</div><div>${d.act}</div><div style="margin-top:4px">触点：${d.touch}</div></div>
+</div>
+${c?`<div class="lbl" style="margin:12px 0 6px">用户看到的卡片（AI 只负责选这张卡，内容来自平台数据）</div>
+<div style="background:var(--surface-1);border-radius:12px;padding:12px;display:flex;justify-content:center"><div class="box" style="width:100%;max-width:320px"><span style="font-size:11px;background:var(--accent-bg);color:var(--accent);padding:1px 6px;border-radius:var(--radius)">${c.k}</span><p style="margin:8px 0 2px;font-size:16px;font-weight:600">${c.t}</p><p style="margin:0 0 10px;font-size:12px;color:var(--text-2)">${c.s}</p><div style="display:flex;gap:8px">${c.b.map(x=>`<button style="flex:1">${x}</button>`).join('')}</div></div></div>`:''}
+<div style="font-size:13px;margin-top:10px;color:var(--text-2)">${d.why}</div></div>`}
+function stop(){if(timer){clearInterval(timer);timer=null}}
+$('next').onclick=()=>{stop();if(k<S[si].ev.length-1){k++;render()}};
+$('reset').onclick=()=>{stop();k=0;render()};
+$('play').onclick=()=>{stop();timer=setInterval(()=>{if(k<S[si].ev.length-1){k++;render()}else stop()},700)};
+tabs();render();
+</script>
+</body>
+</html>
