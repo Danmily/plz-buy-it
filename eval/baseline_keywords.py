@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
-"""关键词规则基线：只看 query 文本，给模型提供一个下限。
+"""关键词规则基线：只看 query 文本，作为模型的下限。
 
-用法：python3 eval/baseline_keywords.py eval/testset_v0.jsonl > preds_baseline.jsonl
+  python3 eval/baseline_keywords.py eval/testset_v1.jsonl > preds.jsonl
+  cat cases.jsonl | python3 eval/baseline_keywords.py -        # 从 stdin 读
 """
 import json
 import re
 import sys
 
 KW = {
-    '价格': ['优惠明细', '降价', '价格区', '领取'],
-    '等大促': ['双11', '大促', '开售提醒'],
+    '价格': ['优惠', '降价', '价格', '便宜', '券'],
+    '等大促': ['双11', '大促', '预售', '活动'],
     '凑单': ['满减', '凑单'],
-    '比价': ['同类商品', '哪个好', '来回切换', '另一品牌'],
-    '品质信任': ['差评', '买家秀', '资质', '正品'],
-    '规格适配': ['对照表', '切换为', '怎么选', '相关评价'],
-    '物流售后': ['配送时效', '退换货', '收货地址切换', '多久能到'],
-    '流程摩擦': ['支付失败', '超出配送范围', '反复点击支付'],
+    '比价': ['同类', '哪个好', '对比', '平替', '区别'],
+    '品质信任': ['差评', '买家秀', '资质', '正品', '质量'],
+    '规格适配': ['切换为', '对照表', '偏大', '偏小', '怎么选'],
+    '物流售后': ['配送', '送达', '退货', '运费', '快递'],
+    '流程摩擦': ['支付失败', '付不了', '超出配送范围', '支付按钮'],
 }
 ACTION = {'价格': '定向券', '等大促': '价保', '凑单': '凑单推荐', '比价': '对比卡片', '品质信任': '好评与保障',
           '规格适配': '尺码与规格助手', '物流售后': '时效与运费险', '流程摩擦': '支付引导'}
@@ -25,7 +26,7 @@ def predict(case):
     hits = {c: [] for c in KW}
     for line in case['query'].splitlines():
         m = re.match(r'#(\d+) ', line)
-        if not m:
+        if not m or '客服机器人' in line:
             continue
         for c, kws in KW.items():
             if any(k in line for k in kws):
@@ -41,8 +42,9 @@ def predict(case):
 
 
 def main():
-    with open(sys.argv[1], encoding='utf-8') as f:
-        for l in f:
+    src = sys.stdin if len(sys.argv) < 2 or sys.argv[1] == '-' else open(sys.argv[1], encoding='utf-8')
+    for l in src:
+        if l.strip():
             print(json.dumps(predict(json.loads(l)), ensure_ascii=False))
 
 

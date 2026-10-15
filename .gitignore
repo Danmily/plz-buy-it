@@ -1,0 +1,5 @@
+eval/runs/
+eval/train_data/
+__pycache__/
+*.pyc
+.DS_Store
